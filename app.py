@@ -4,7 +4,7 @@
 
 import streamlit as st
 import pandas as pd
-from config import TICKER, APP_TITLE, APP_ICON, TIMEFRAMES, DEFAULT_TIMEFRAME
+from config import TICKER, APP_TITLE, APP_ICON, TIMEFRAMES, DEFAULT_TIMEFRAME, EMA_SHORT, EMA_LONG
 from data import fetch_data
 from indicators import compute_all
 from signals import get_all_signals
