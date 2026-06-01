@@ -81,8 +81,8 @@ latest      = df.iloc[-1]
 prev        = df.iloc[-2] if len(df) >= 2 else df.iloc[-1]
 price_chg   = latest["Close"] - prev["Close"]
 price_chg_p = price_chg / prev["Close"] * 100
-rsi_val     = df["RSI"].dropna().iloc[-1] if "RSI" in df.columns else None
-vol_ratio   = df["VolumeRatio"].dropna().iloc[-1] if "VolumeRatio" in df.columns else None
+rsi_val = df["RSI"].dropna().iloc[-1] if "RSI" in df.columns and len(df["RSI"].dropna()) > 0 else None
+vol_ratio = df["VolumeRatio"].dropna().iloc[-1] if "VolumeRatio" in df.columns and len(df["VolumeRatio"].dropna()) > 0 else None
 
 stat1, stat2, stat3, stat4, stat5 = st.columns(5)
 with stat1:
