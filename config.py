@@ -9,8 +9,10 @@ APP_ICON = "📈"
 # Timeframe options shown as buttons in the UI
 # Key = label on the button, Value = how far back yfinance fetches
 TIMEFRAMES = {
+    "1D":  "1d",
+    "1W":  "5d",
     "1M":  "1mo",
-    "3M":  "3mo",   # default
+    "3M":  "3mo",
     "6M":  "6mo",
     "1Y":  "1y",
     "2Y":  "2y",
