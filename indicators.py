@@ -11,6 +11,8 @@ from config import (
     RSI_PERIOD, MACD_FAST, MACD_SLOW, MACD_SIGNAL,
     DARK_POOL_VOLUME_THRESHOLD, DARK_POOL_RANGE_THRESHOLD,
     ABSORPTION_VOLUME_MULTIPLIER, ABSORPTION_PRICE_MOVE_MAX,
+    CMF_PERIOD, OBV_EMA_PERIOD,
+    QUIET_DRIFT_DAYS, QUIET_DRIFT_VOLUME_MAX, QUIET_DRIFT_PRICE_GAIN_MIN,
 )
 
 
@@ -26,10 +28,13 @@ def add_obv(df: pd.DataFrame) -> pd.DataFrame:
     """
     On Balance Volume: running total that adds volume on up days,
     subtracts on down days. Helps detect accumulation/distribution.
+    Also adds a 20-day EMA of OBV — when OBV crosses above its EMA,
+    that's the cleaner accumulation signal (rather than just OBV direction).
     """
     df = df.copy()
     direction = np.sign(df["Close"].diff()).fillna(0)
     df["OBV"] = (direction * df["Volume"]).cumsum()
+    df["OBVEMA"] = df["OBV"].ewm(span=OBV_EMA_PERIOD, adjust=False).mean()
     return df
 
 
@@ -82,10 +87,7 @@ def add_macd(df: pd.DataFrame) -> pd.DataFrame:
 def add_dark_pool_approx(df: pd.DataFrame) -> pd.DataFrame:
     """
     Dark pool approximation: flags days with elevated volume but
-    a very tight intraday price range. The logic: institutional
-    orders routed off-exchange leave a fingerprint — big volume,
-    little price movement. Not a direct dark pool feed, but a
-    reasonable proxy for unusual institutional accumulation.
+    a very tight intraday price range.
     """
     df = df.copy()
     if "Volume20Avg" not in df.columns:
@@ -103,8 +105,6 @@ def add_absorption_signals(df: pd.DataFrame) -> pd.DataFrame:
     """
     Absorption / price-volume divergence:
     Flags days where volume is elevated but price barely moved.
-    Absorption = large players absorbing sell pressure (or supply)
-    without letting price fall (or rise). Often precedes reversals.
     """
     df = df.copy()
     if "Volume20Avg" not in df.columns:
@@ -121,10 +121,7 @@ def add_absorption_signals(df: pd.DataFrame) -> pd.DataFrame:
 def add_institutional_activity(df: pd.DataFrame) -> pd.DataFrame:
     """
     Institutional activity approximation.
-    Combines multiple volume-based signals to score each day:
-    - Volume spike (2x avg): +1
-    - Dark pool signal (high vol, tight range): +2
-    - Absorption signal (high vol, tiny price move): +2
+    Combines multiple volume-based signals to score each day.
     Score 0 = nothing unusual, 3-5 = significant institutional footprint.
     """
     df = df.copy()
@@ -143,6 +140,58 @@ def add_institutional_activity(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def add_cmf(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Chaikin Money Flow (CMF) over CMF_PERIOD days.
+
+    How it works:
+    1. For each day, calculate the Money Flow Multiplier:
+       MFM = ((Close - Low) - (High - Close)) / (High - Low)
+       Close near the HIGH  = MFM close to +1 (buyers in control)
+       Close near the LOW   = MFM close to -1 (sellers in control)
+    2. Multiply MFM by volume = Money Flow Volume
+    3. CMF = sum of MFV over 20 days / sum of Volume over 20 days
+
+    Above 0  = accumulation, Below 0 = distribution.
+    Above +0.1 or below -0.1 are meaningful thresholds.
+    """
+    df = df.copy()
+    high_low_range = (df["High"] - df["Low"]).replace(0, np.nan)
+    mfm = ((df["Close"] - df["Low"]) - (df["High"] - df["Close"])) / high_low_range
+    mfv = mfm * df["Volume"]
+    df["CMF"] = mfv.rolling(CMF_PERIOD).sum() / df["Volume"].rolling(CMF_PERIOD).sum()
+    return df
+
+
+def add_quiet_drift(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Quiet Drift Detector: flags stretches where price drifts up on
+    below-average volume for N consecutive days.
+
+    Institutions accumulating a large position buy gradually on quiet
+    days — low volume, small steady gains.
+
+    Produces:
+    - QuietDriftDay: True on any day that qualifies individually
+    - QuietDriftSignal: True on the Nth day of a qualifying streak
+    """
+    df = df.copy()
+    if "Volume20Avg" not in df.columns:
+        df = add_volume_metrics(df)
+
+    price_change_pct = df["Close"].pct_change()
+
+    df["QuietDriftDay"] = (
+        (df["Volume"] < df["Volume20Avg"] * QUIET_DRIFT_VOLUME_MAX) &
+        (price_change_pct >= QUIET_DRIFT_PRICE_GAIN_MIN)
+    )
+
+    streak = df["QuietDriftDay"].astype(int).rolling(QUIET_DRIFT_DAYS).sum()
+    df["QuietDriftSignal"] = streak >= QUIET_DRIFT_DAYS
+
+    return df
+
+
 def compute_all(df: pd.DataFrame) -> pd.DataFrame:
     """
     Master function — runs every indicator in the correct order.
@@ -156,4 +205,6 @@ def compute_all(df: pd.DataFrame) -> pd.DataFrame:
     df = add_dark_pool_approx(df)
     df = add_absorption_signals(df)
     df = add_institutional_activity(df)
+    df = add_cmf(df)
+    df = add_quiet_drift(df)
     return df

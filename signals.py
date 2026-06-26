@@ -14,12 +14,6 @@ def _latest(df: pd.DataFrame, col: str):
 
 
 def signal_trend(df: pd.DataFrame) -> dict:
-    """
-    EMA trend signal.
-    Green  = price above both EMAs AND EMA50 > EMA200 (uptrend)
-    Yellow = price between EMAs or mixed signals
-    Red    = price below both EMAs AND EMA50 < EMA200 (downtrend)
-    """
     close    = _latest(df, "Close")
     ema_s    = _latest(df, f"EMA{EMA_SHORT}")
     ema_l    = _latest(df, f"EMA{EMA_LONG}")
@@ -43,12 +37,6 @@ def signal_trend(df: pd.DataFrame) -> dict:
 
 
 def signal_rsi(df: pd.DataFrame) -> dict:
-    """
-    RSI signal.
-    Green  = 40–65 (healthy range, room to run)
-    Yellow = 65–70 or 30–40 (approaching extremes)
-    Red    = above 70 (overbought) or below 30 (oversold)
-    """
     rsi = _latest(df, "RSI")
 
     if rsi is None:
@@ -77,12 +65,6 @@ def signal_rsi(df: pd.DataFrame) -> dict:
 
 
 def signal_macd(df: pd.DataFrame) -> dict:
-    """
-    MACD signal based on line vs signal line relationship and histogram direction.
-    Green  = MACD above signal and histogram expanding
-    Yellow = MACD above signal but histogram shrinking (momentum fading)
-    Red    = MACD below signal line
-    """
     macd     = _latest(df, "MACD")
     signal   = _latest(df, "MACDSignal")
     hist_now = _latest(df, "MACDHist")
@@ -90,7 +72,6 @@ def signal_macd(df: pd.DataFrame) -> dict:
     if None in (macd, signal, hist_now):
         return {"label": "MACD", "status": "yellow", "message": "MACD not yet calculated."}
 
-    # Check histogram direction (last 2 bars)
     hist_series = df["MACDHist"].dropna()
     hist_prev   = hist_series.iloc[-2] if len(hist_series) >= 2 else hist_now
     expanding   = abs(hist_now) > abs(hist_prev)
@@ -110,13 +91,6 @@ def signal_macd(df: pd.DataFrame) -> dict:
 
 
 def signal_volume(df: pd.DataFrame) -> dict:
-    """
-    Volume spike signal — looks at the most recent session.
-    Green  = no spike (normal, healthy)
-    Yellow = spike on a day price didn't move much (inconclusive)
-    Red    = spike on a down day (distribution signal)
-    The 'green spike on up day' case is handled separately.
-    """
     if "VolumeSpike" not in df.columns or "VolumeRatio" not in df.columns:
         return {"label": "Volume", "status": "yellow", "message": "Volume data unavailable."}
 
@@ -145,19 +119,14 @@ def signal_volume(df: pd.DataFrame) -> dict:
 
 
 def signal_obv(df: pd.DataFrame) -> dict:
-    """
-    OBV trend: compares current OBV direction to price direction.
-    Divergence (OBV falling while price rises, or vice versa) is the key signal.
-    Uses a 10-day lookback.
-    """
     if "OBV" not in df.columns:
         return {"label": "OBV", "status": "yellow", "message": "OBV not calculated."}
 
-    lookback  = min(10, len(df) - 1)
-    obv_now   = df["OBV"].iloc[-1]
-    obv_then  = df["OBV"].iloc[-lookback]
-    price_now = df["Close"].iloc[-1]
-    price_then= df["Close"].iloc[-lookback]
+    lookback   = min(10, len(df) - 1)
+    obv_now    = df["OBV"].iloc[-1]
+    obv_then   = df["OBV"].iloc[-lookback]
+    price_now  = df["Close"].iloc[-1]
+    price_then = df["Close"].iloc[-lookback]
 
     obv_rising   = obv_now > obv_then
     price_rising = price_now > price_then
@@ -179,19 +148,13 @@ def signal_obv(df: pd.DataFrame) -> dict:
 
 
 def signal_institutional(df: pd.DataFrame) -> dict:
-    """
-    Institutional activity approximation based on InstitutionalScore.
-    Score 0–1 = nothing unusual
-    Score 2–3 = moderate institutional footprint
-    Score 4–5 = strong signal
-    """
     if "InstitutionalScore" not in df.columns:
         return {"label": "Institutional Activity", "status": "yellow",
                 "message": "Institutional score not available."}
 
-    score = _latest(df, "InstitutionalScore")
-    dark  = _latest(df, "DarkPoolSignal")
-    absorb= _latest(df, "AbsorptionSignal")
+    score  = _latest(df, "InstitutionalScore")
+    dark   = _latest(df, "DarkPoolSignal")
+    absorb = _latest(df, "AbsorptionSignal")
 
     notes = []
     if dark:
@@ -214,11 +177,48 @@ def signal_institutional(df: pd.DataFrame) -> dict:
                 "message": "No unusual institutional footprint detected in the latest session."}
 
 
+def signal_cmf(df: pd.DataFrame) -> dict:
+    if "CMF" not in df.columns:
+        return {"label": "CMF (20)", "status": "yellow", "message": "CMF not calculated."}
+
+    cmf = _latest(df, "CMF")
+    if cmf is None:
+        return {"label": "CMF (20)", "status": "yellow", "message": "Not enough data for CMF."}
+
+    if cmf >= 0.1:
+        return {"label": "CMF (20)", "status": "green",
+                "message": f"CMF is {cmf:.3f} — above +0.1. Volume is weighted toward closes "
+                           "near the HIGH of the day. Accumulation signal."}
+    elif cmf <= -0.1:
+        return {"label": "CMF (20)", "status": "red",
+                "message": f"CMF is {cmf:.3f} — below -0.1. Volume is weighted toward closes "
+                           "near the LOW of the day. Distribution signal."}
+    else:
+        return {"label": "CMF (20)", "status": "yellow",
+                "message": f"CMF is {cmf:.3f} — in neutral territory (-0.1 to +0.1). "
+                           "No strong conviction from money flow. Watch for a break either way."}
+
+
+def signal_quiet_drift(df: pd.DataFrame) -> dict:
+    if "QuietDriftSignal" not in df.columns or "QuietDriftDay" not in df.columns:
+        return {"label": "Quiet Drift", "status": "yellow",
+                "message": "Quiet drift data not available."}
+
+    signal_active = df["QuietDriftSignal"].iloc[-1]
+    streak_days   = int(df["QuietDriftDay"].astype(int).iloc[-5:].sum())
+
+    if signal_active:
+        return {"label": "Quiet Drift", "status": "green",
+                "message": f"Quiet drift detected — {streak_days} of the last 5 days showed "
+                           "below-average volume with a small price gain. "
+                           "Possible institutional stealth accumulation."}
+    else:
+        return {"label": "Quiet Drift", "status": "yellow",
+                "message": "No quiet drift pattern detected. Volume and price action "
+                           "are not showing the low-volume creep associated with stealth accumulation."}
+
+
 def get_all_signals(df: pd.DataFrame) -> list:
-    """
-    Returns a list of all signal dicts.
-    app.py iterates over this to render the signal cards.
-    """
     return [
         signal_trend(df),
         signal_rsi(df),
@@ -226,4 +226,6 @@ def get_all_signals(df: pd.DataFrame) -> list:
         signal_volume(df),
         signal_obv(df),
         signal_institutional(df),
+        signal_cmf(df),
+        signal_quiet_drift(df),
     ]

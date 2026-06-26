@@ -37,14 +37,23 @@ MACD_SLOW   = 26
 MACD_SIGNAL = 9
 
 # Dark pool approximation — looks for high-volume days with unusually small price range
-# A narrow price range + big volume = possible institutional accumulation off-exchange
-DARK_POOL_VOLUME_THRESHOLD  = 1.5   # x above 20-day avg volume
-DARK_POOL_RANGE_THRESHOLD   = 0.5   # price range must be < this % of price (very tight candle)
+DARK_POOL_VOLUME_THRESHOLD  = 1.5
+DARK_POOL_RANGE_THRESHOLD   = 0.5
 
 # Price/volume divergence — absorption signal settings
-# Flags days where price moved little but volume was elevated (absorption)
-ABSORPTION_VOLUME_MULTIPLIER = 1.5  # volume > 1.5x 20-day avg
-ABSORPTION_PRICE_MOVE_MAX    = 0.5  # price move < 0.5% despite high volume
+ABSORPTION_VOLUME_MULTIPLIER = 1.5
+ABSORPTION_PRICE_MOVE_MAX    = 0.5
+
+# Chaikin Money Flow (CMF) — measures buying/selling pressure weighted by position in day's range
+CMF_PERIOD = 20
+
+# OBV EMA overlay — smoothed OBV to detect crossover signals
+OBV_EMA_PERIOD = 20
+
+# Quiet drift detector — looks for slow institutional accumulation below the radar
+QUIET_DRIFT_DAYS           = 3
+QUIET_DRIFT_VOLUME_MAX     = 0.85
+QUIET_DRIFT_PRICE_GAIN_MIN = 0.001
 
 # Streamlit cache TTL — data refreshes every 15 minutes
 CACHE_TTL_SECONDS = 900

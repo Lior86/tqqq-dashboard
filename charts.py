@@ -63,7 +63,6 @@ def chart_candlestick(df: pd.DataFrame) -> go.Figure:
     """
     fig = go.Figure()
 
-    # Candlestick
     fig.add_trace(go.Candlestick(
         x=df.index,
         open=df["Open"], high=df["High"],
@@ -75,7 +74,6 @@ def chart_candlestick(df: pd.DataFrame) -> go.Figure:
         decreasing_fillcolor=CANDLE_DOWN,
     ))
 
-    # EMA50
     ema_s_col = f"EMA{EMA_SHORT}"
     if ema_s_col in df.columns:
         fig.add_trace(go.Scatter(
@@ -84,7 +82,6 @@ def chart_candlestick(df: pd.DataFrame) -> go.Figure:
             name=f"EMA {EMA_SHORT}",
         ))
 
-    # EMA200
     ema_l_col = f"EMA{EMA_LONG}"
     if ema_l_col in df.columns:
         fig.add_trace(go.Scatter(
@@ -93,7 +90,6 @@ def chart_candlestick(df: pd.DataFrame) -> go.Figure:
             name=f"EMA {EMA_LONG}",
         ))
 
-    # Volume spike markers on the candlestick
     if "VolumeSpike" in df.columns:
         spikes = df[df["VolumeSpike"]]
         if not spikes.empty:
@@ -106,7 +102,6 @@ def chart_candlestick(df: pd.DataFrame) -> go.Figure:
                 hovertemplate="Volume Spike<br>%{x}<extra></extra>",
             ))
 
-    # Dark pool signal markers
     if "DarkPoolSignal" in df.columns:
         dp = df[df["DarkPoolSignal"]]
         if not dp.empty:
@@ -156,7 +151,11 @@ def chart_volume(df: pd.DataFrame) -> go.Figure:
 
 
 def chart_obv(df: pd.DataFrame) -> go.Figure:
-    """OBV line chart — simple running total."""
+    """
+    OBV line chart with a 20-day EMA overlay.
+    When OBV crosses above its EMA = accumulation confirmed.
+    When OBV crosses below its EMA = distribution signal.
+    """
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         x=df.index, y=df["OBV"],
@@ -165,7 +164,13 @@ def chart_obv(df: pd.DataFrame) -> go.Figure:
         fillcolor="rgba(77,166,255,0.08)",
         name="OBV",
     ))
-    fig.update_layout(**_base_layout("On Balance Volume (OBV)", height=260))
+    if "OBVEMA" in df.columns:
+        fig.add_trace(go.Scatter(
+            x=df.index, y=df["OBVEMA"],
+            line=dict(color=ORANGE, width=1.5, dash="dot"),
+            name="OBV EMA (20)",
+        ))
+    fig.update_layout(**_base_layout("On Balance Volume (OBV) + EMA", height=260))
     return fig
 
 
@@ -179,7 +184,6 @@ def chart_rsi(df: pd.DataFrame) -> go.Figure:
         name="RSI",
     ))
 
-    # Overbought / oversold zones
     fig.add_hrect(y0=70, y1=100, fillcolor="rgba(255,75,110,0.08)",
                   line_width=0, annotation_text="Overbought",
                   annotation_position="top right",
@@ -225,4 +229,39 @@ def chart_macd(df: pd.DataFrame) -> go.Figure:
     fig.add_hline(y=0, line_color=GRID_COLOR, line_width=1)
 
     fig.update_layout(**_base_layout("MACD (12, 26, 9)", height=260))
+    return fig
+
+
+def chart_cmf(df: pd.DataFrame) -> go.Figure:
+    """
+    Chaikin Money Flow chart.
+    Bars above zero = buying pressure (accumulation).
+    Bars below zero = selling pressure (distribution).
+    +0.1 / -0.1 reference lines mark meaningful thresholds.
+    """
+    fig = go.Figure()
+
+    cmf_colors = [GREEN if v >= 0 else RED for v in df["CMF"].fillna(0)]
+
+    fig.add_trace(go.Bar(
+        x=df.index,
+        y=df["CMF"],
+        marker_color=cmf_colors,
+        opacity=0.75,
+        name="CMF (20)",
+        hovertemplate="%{x}<br>CMF: %{y:.3f}<extra></extra>",
+    ))
+
+    fig.add_hline(y=0, line_color=GRID_COLOR, line_width=1)
+
+    fig.add_hline(y=0.1,  line_dash="dot", line_color=GREEN, line_width=1,
+                  annotation_text="+0.1 Accumulation", annotation_position="top left",
+                  annotation=dict(font_color=GREEN, font_size=10))
+    fig.add_hline(y=-0.1, line_dash="dot", line_color=RED, line_width=1,
+                  annotation_text="-0.1 Distribution", annotation_position="bottom left",
+                  annotation=dict(font_color=RED, font_size=10))
+
+    layout = _base_layout("Chaikin Money Flow (CMF 20)", height=260)
+    layout["yaxis"]["range"] = [-1, 1]
+    fig.update_layout(**layout)
     return fig

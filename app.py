@@ -14,6 +14,7 @@ from charts import (
     chart_obv,
     chart_rsi,
     chart_macd,
+    chart_cmf,
 )
 
 # ── Page config ───────────────────────────────────────────────────────────────
@@ -81,7 +82,7 @@ latest      = df.iloc[-1]
 prev        = df.iloc[-2] if len(df) >= 2 else df.iloc[-1]
 price_chg   = latest["Close"] - prev["Close"]
 price_chg_p = price_chg / prev["Close"] * 100
-rsi_val = df["RSI"].dropna().iloc[-1] if "RSI" in df.columns and len(df["RSI"].dropna()) > 0 else None
+rsi_val  = df["RSI"].dropna().iloc[-1] if "RSI" in df.columns and len(df["RSI"].dropna()) > 0 else None
 vol_ratio = df["VolumeRatio"].dropna().iloc[-1] if "VolumeRatio" in df.columns and len(df["VolumeRatio"].dropna()) > 0 else None
 
 stat1, stat2, stat3, stat4, stat5 = st.columns(5)
@@ -122,8 +123,12 @@ with chart_col:
     with rsi_col:
         st.plotly_chart(chart_rsi(df), use_container_width=True)
 
-    # MACD
-    st.plotly_chart(chart_macd(df), use_container_width=True)
+    # MACD + CMF side by side
+    macd_col, cmf_col = st.columns(2)
+    with macd_col:
+        st.plotly_chart(chart_macd(df), use_container_width=True)
+    with cmf_col:
+        st.plotly_chart(chart_cmf(df), use_container_width=True)
 
 
 with signal_col:
@@ -133,7 +138,7 @@ with signal_col:
     signals = get_all_signals(df)
 
     for sig in signals:
-        status = sig["status"]        # "green" / "yellow" / "red"
+        status = sig["status"]
         label  = sig["label"]
         msg    = sig["message"]
 
@@ -151,7 +156,6 @@ with signal_col:
 
     st.divider()
 
-    # Raw data expander at the bottom of the signal column
     with st.expander("Raw Data (last 10 rows)"):
         display_cols = ["Open", "High", "Low", "Close", "Volume",
                         f"EMA{EMA_SHORT}", f"EMA{EMA_LONG}",
